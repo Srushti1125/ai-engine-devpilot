@@ -10,6 +10,7 @@ Step 5 — Retriever (hybrid: MMR + metadata filtering).
   table/collection.
 """
 from app.retrieval.vectorstore import get_vectorstore
+from app.config import settings
 
 DEFAULT_K = 6
 DEFAULT_FETCH_K = 20
@@ -27,6 +28,11 @@ def get_retriever(
     filt: dict = {"project_id": project_id}
     if doc_type:
         filt["doc_type"] = doc_type
+
+    # Chroma requires multiple metadata predicates to be combined explicitly
+    # with $and. PGVector accepts the plain dictionary form.
+    if settings.VECTOR_STORE_BACKEND == "chroma" and len(filt) > 1:
+        filt = {"$and": [{key: value} for key, value in filt.items()]}
 
     return vs.as_retriever(
         search_type="mmr",

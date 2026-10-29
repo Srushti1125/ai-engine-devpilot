@@ -18,6 +18,8 @@ human: |
   Justify the architecture pattern choice briefly within the `rationale`
   field. Prefer hosted/managed services over self-hosted/local
   infrastructure unless the requirement explicitly demands otherwise.
+  Include an `assumptions` array for inferred requirements or constraints;
+  return an empty array when no assumptions were needed.
 
   Output schema:
   {format_instructions}

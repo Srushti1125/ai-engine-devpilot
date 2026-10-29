@@ -28,6 +28,7 @@ def build_generation_chain(
     schema_cls,
     model_alias: str | None = None,
     doc_type: str | None = "requirement",
+    retrieval_trace: list[dict] | None = None,
 ):
     """
     Assembles the RAG -> Prompt -> LLM runnable for one artifact type.
@@ -44,6 +45,27 @@ def build_generation_chain(
     def _inputs(x: dict) -> dict:
         requirement_text = x["requirement"]
         docs = retriever.invoke(requirement_text)
+        if retrieval_trace is not None:
+            retrieval_trace.clear()
+            seen = set()
+            for doc in docs:
+                metadata = doc.metadata or {}
+                source = metadata.get("source_name") or metadata.get("source") or "Uploaded requirement"
+                key = (source, metadata.get("chunk_index"))
+                if key in seen:
+                    continue
+                seen.add(key)
+                sections = [
+                    metadata[name]
+                    for name in ("h1", "h2", "h3")
+                    if metadata.get(name)
+                ]
+                retrieval_trace.append({
+                    "source": source,
+                    "sections": sections,
+                    "chunk_index": metadata.get("chunk_index"),
+                    "excerpt": doc.page_content[:1200],
+                })
         return {
             "requirement": requirement_text,
             "context": _format_docs(docs),
@@ -67,12 +89,19 @@ def run_generation(
     dict ready to hand back to Person 2 (and to log in `generation_history`
     for Person 5).
     """
-    chain, parser, version_id = build_generation_chain(artifact_type, project_id, schema_cls)
+    retrieval_trace: list[dict] = []
+    chain, parser, version_id = build_generation_chain(
+        artifact_type, project_id, schema_cls, retrieval_trace=retrieval_trace
+    )
 
     fallback_chain = None
     if settings.FALLBACK_LLM and settings.FALLBACK_LLM != settings.DEFAULT_LLM:
         fallback_chain, _, _ = build_generation_chain(
-            artifact_type, project_id, schema_cls, model_alias=settings.FALLBACK_LLM
+            artifact_type,
+            project_id,
+            schema_cls,
+            model_alias=settings.FALLBACK_LLM,
+            retrieval_trace=retrieval_trace,
         )
 
     result, raw = generate_with_quality_check(
@@ -90,6 +119,7 @@ def run_generation(
         "project_id": project_id,
         "prompt_version": version_id,
         "output": result.model_dump(),
+        "sources": retrieval_trace,
         "usage": {
             "prompt_tokens": usage.get("input_tokens", 0),
             "completion_tokens": usage.get("output_tokens", 0),

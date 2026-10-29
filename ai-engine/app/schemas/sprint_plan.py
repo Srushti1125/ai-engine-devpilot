@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SprintItem(BaseModel):
@@ -11,5 +11,6 @@ class SprintItem(BaseModel):
 
 class SprintPlan(BaseModel):
     items: list[SprintItem]
+    assumptions: list[str] = Field(description="Inferred assumptions about estimates, team capacity, or dependencies")
     critical_path: list[str] = []
     assumed_velocity_points_per_sprint: int = 0

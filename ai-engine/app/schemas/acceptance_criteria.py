@@ -11,3 +11,4 @@ class AcceptanceCriterion(BaseModel):
 class AcceptanceCriteriaList(BaseModel):
     user_story_title: str
     criteria: list[AcceptanceCriterion]
+    assumptions: list[str] = Field(description="Inferred assumptions used; return an empty list when none were needed")

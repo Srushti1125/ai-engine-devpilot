@@ -16,3 +16,4 @@ class UserStory(BaseModel):
 
 class UserStoryList(BaseModel):
     stories: list[UserStory]
+    assumptions: list[str] = Field(description="Inferred assumptions used; return an empty list when none were needed")

@@ -18,6 +18,8 @@ human: |
   Include at minimum: 2 positive cases, 2 negative cases, 1 boundary case,
   1 security case. Every test case must reference the requirement text it
   traces back to in `traceability`.
+  Include an `assumptions` array for any inferred test behavior; return an
+  empty array when no assumptions were needed.
 
   Output schema:
   {format_instructions}

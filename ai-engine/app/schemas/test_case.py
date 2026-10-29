@@ -12,3 +12,4 @@ class TestCase(BaseModel):
 
 class TestCaseList(BaseModel):
     cases: list[TestCase]
+    assumptions: list[str] = Field(description="Inferred assumptions used; return an empty list when none were needed")

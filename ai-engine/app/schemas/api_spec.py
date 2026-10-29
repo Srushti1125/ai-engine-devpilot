@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ApiField(BaseModel):
@@ -24,3 +24,4 @@ class ApiEndpoint(BaseModel):
 
 class ApiSpecList(BaseModel):
     endpoints: list[ApiEndpoint]
+    assumptions: list[str] = Field(description="Inferred assumptions used; return an empty list when none were needed")

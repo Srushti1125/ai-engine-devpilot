@@ -6,6 +6,7 @@ Streamlit secrets before deploying. Community Cloud uses local Chroma storage.
 """
 import os
 import json
+import hashlib
 import tempfile
 from pathlib import Path
 
@@ -35,7 +36,7 @@ for _key in (
 from app.ingestion.loaders import SUPPORTED_EXTENSIONS, load_requirement_doc
 from app.ingestion.splitters import chunk_documents
 from app.pipeline.chain import run_generation
-from app.retrieval.vectorstore import index_chunks
+from app.retrieval.vectorstore import index_document_chunks
 from app.schemas.registry import SCHEMA_REGISTRY
 
 
@@ -50,6 +51,15 @@ def _text(value) -> str:
 
 def _render_artifact(artifact_type: str, data: dict) -> None:
     """Render generated schema fields as readable sections and cards."""
+    assumptions = data.get("assumptions", [])
+    with st.container(border=True):
+        st.markdown("#### Assumptions")
+        if assumptions:
+            for assumption in assumptions:
+                st.markdown(f"- {assumption}")
+        else:
+            st.write("No additional assumptions were reported.")
+
     if artifact_type == "user_story":
         for i, story in enumerate(data.get("stories", []), 1):
             with st.container(border=True):
@@ -172,59 +182,132 @@ uploaded_file = st.file_uploader(
     type=sorted(ext.lstrip(".") for ext in SUPPORTED_EXTENSIONS),
 )
 
-generate_clicked = st.button("Generate artifact", type="primary", use_container_width=True)
+file_bytes = uploaded_file.getvalue() if uploaded_file is not None else None
+file_fingerprint = hashlib.sha256(file_bytes).hexdigest() if file_bytes is not None else None
+
+process_clicked = st.button(
+    "Process requirements document",
+    disabled=uploaded_file is None or not project_id.strip(),
+)
+
+if process_clicked and uploaded_file is not None:
+    suffix = Path(uploaded_file.name).suffix.lower()
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+            temp_file.write(file_bytes)
+            temp_path = temp_file.name
+
+        with st.spinner("Extracting text and preparing requirement chunks…"):
+            documents = load_requirement_doc(temp_path, project_id.strip())
+            extracted_text = "\n\n".join(doc.page_content for doc in documents).strip()
+            if not extracted_text:
+                raise ValueError("No readable text was extracted from the document.")
+
+            for doc in documents:
+                doc.metadata.update({
+                    "source": uploaded_file.name,
+                    "source_name": uploaded_file.name,
+                    "document_fingerprint": file_fingerprint,
+                })
+            chunks = chunk_documents(documents)
+            chunk_count, reused = index_document_chunks(chunks)
+
+        st.session_state["processed_requirement_document"] = {
+            "project_id": project_id.strip(),
+            "source_name": uploaded_file.name,
+            "fingerprint": file_fingerprint,
+            "extracted_text": extracted_text,
+            "chunk_count": chunk_count,
+            "reused": reused,
+        }
+    except Exception as exc:
+        st.session_state.pop("processed_requirement_document", None)
+        st.error(f"Could not process the requirements document: {exc}")
+    finally:
+        if temp_path:
+            Path(temp_path).unlink(missing_ok=True)
+
+processed_document = st.session_state.get("processed_requirement_document")
+document_is_ready = bool(
+    processed_document
+    and uploaded_file is not None
+    and processed_document["project_id"] == project_id.strip()
+    and processed_document["fingerprint"] == file_fingerprint
+)
+
+if document_is_ready:
+    if processed_document["reused"]:
+        st.success(
+            f"Reused {processed_document['chunk_count']} indexed chunks from "
+            f"**{processed_document['source_name']}**."
+        )
+    else:
+        st.success(
+            f"Indexed {processed_document['chunk_count']} chunks from "
+            f"**{processed_document['source_name']}**."
+        )
+    with st.expander("Extracted text preview", expanded=False):
+        st.caption(f"Source: {processed_document['source_name']}")
+        st.text(processed_document["extracted_text"][:20000])
+        if len(processed_document["extracted_text"]) > 20000:
+            st.caption("Preview truncated to 20,000 characters.")
+elif uploaded_file is not None:
+    st.info("Process this document to review its extracted text before generating.")
+else:
+    st.info("Upload a project requirements document to continue.")
+
+generate_clicked = st.button(
+    "Generate artifact",
+    type="primary",
+    use_container_width=True,
+    disabled=not document_is_ready or not generation_specs.strip(),
+)
 
 if generate_clicked:
-    if not project_id.strip():
-        st.error("Enter a project ID.")
-    elif uploaded_file is None:
-        st.error("Upload the project requirements document before generating an artifact.")
-    elif not generation_specs.strip():
-        st.error("Enter generation specifications, such as team size or sprint duration.")
-    else:
-        try:
-            suffix = Path(uploaded_file.name).suffix.lower()
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
-                temp_file.write(uploaded_file.getvalue())
-                temp_path = temp_file.name
-            try:
-                with st.spinner("Reading and indexing the uploaded requirements document…"):
-                    documents = load_requirement_doc(temp_path, project_id.strip())
-                    chunks = chunk_documents(documents)
-                    count = index_chunks(chunks)
-                st.success(f"Indexed {count} requirement chunk(s) for project {project_id.strip()}.")
-            finally:
-                Path(temp_path).unlink(missing_ok=True)
+    try:
+        generation_prompt = (
+            f"Use the uploaded project requirements as the source of truth. "
+            f"Generate a {artifact_type.replace('_', ' ')}.\n\n"
+            f"Additional generation specifications from the user:\n{generation_specs.strip()}"
+        )
 
-            generation_prompt = (
-                f"Use the uploaded project requirements as the source of truth. "
-                f"Generate a {artifact_type.replace('_', ' ')}.\n\n"
-                f"Additional generation specifications from the user:\n{generation_specs.strip()}"
+        with st.spinner(f"Generating {artifact_type.replace('_', ' ')}…"):
+            from app.schemas.registry import get_schema
+
+            response = run_generation(
+                artifact_type=artifact_type,
+                project_id=project_id.strip(),
+                requirement_text=generation_prompt,
+                schema_cls=get_schema(artifact_type),
             )
 
-            with st.spinner(f"Generating {artifact_type.replace('_', ' ')}…"):
-                from app.schemas.registry import get_schema
-
-                response = run_generation(
-                    artifact_type=artifact_type,
-                    project_id=project_id.strip(),
-                    requirement_text=generation_prompt,
-                    schema_cls=get_schema(artifact_type),
-                )
-
-            st.subheader(artifact_type.replace("_", " ").title())
-            _render_artifact(artifact_type, response["output"])
-            with st.expander("Generation details"):
-                st.write({
-                    "project_id": response["project_id"],
-                    "prompt_version": response["prompt_version"],
-                    "usage": response["usage"],
-                })
-            st.download_button(
-                "Download JSON",
-                data=json.dumps(response["output"], indent=2, ensure_ascii=False),
-                file_name=f"{artifact_type}_{project_id.strip()}.json",
-                mime="application/json",
-            )
-        except Exception as exc:
-            st.error(f"Could not generate the artifact: {exc}")
+        st.subheader(artifact_type.replace("_", " ").title())
+        sources = response.get("sources", [])
+        with st.expander(f"Requirement sources used ({len(sources)} chunks)", expanded=False):
+            if not sources:
+                st.info("No matching requirement chunks were retrieved for this generation.")
+            for source in sources:
+                section = " › ".join(source.get("sections", [])) or "No section heading detected"
+                chunk_index = source.get("chunk_index")
+                label = f"{source.get('source', 'Requirement document')} · {section}"
+                if chunk_index is not None:
+                    label += f" · chunk {chunk_index + 1}"
+                st.markdown(f"**{label}**")
+                st.text(source.get("excerpt", ""))
+                st.divider()
+        _render_artifact(artifact_type, response["output"])
+        with st.expander("Generation details"):
+            st.write({
+                "project_id": response["project_id"],
+                "prompt_version": response["prompt_version"],
+                "usage": response["usage"],
+            })
+        st.download_button(
+            "Download JSON",
+            data=json.dumps(response["output"], indent=2, ensure_ascii=False),
+            file_name=f"{artifact_type}_{project_id.strip()}.json",
+            mime="application/json",
+        )
+    except Exception as exc:
+        st.error(f"Could not generate the artifact: {exc}")

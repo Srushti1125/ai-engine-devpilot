@@ -16,6 +16,8 @@ human: |
   {repair_note}
 
   Cover at minimum: one positive case, one negative case, one edge case.
+  Include an `assumptions` array for any inferred behavior; return an empty
+  array when no assumptions were needed.
 
   Output schema:
   {format_instructions}

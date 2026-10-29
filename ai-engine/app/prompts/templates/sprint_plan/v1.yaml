@@ -15,9 +15,11 @@ human: |
 
   {repair_note}
 
-  Use Fibonacci-like story points (1, 2, 3, 5, 8, 13). Assume a 2-week
-  sprint and a team velocity that must itself be estimated from the scope
-  given if not otherwise specified.
+  Use Fibonacci-like story points (1, 2, 3, 5, 8, 13). Follow the user's
+  specified sprint duration, team size, and availability. If any are missing,
+  use a 2-week sprint and estimate velocity from the scope. Include an
+  `assumptions` array that explains inferred capacity, estimates, or
+  dependencies; return an empty array when none were needed.
 
   Output schema:
   {format_instructions}

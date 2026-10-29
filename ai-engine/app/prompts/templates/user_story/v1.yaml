@@ -14,5 +14,8 @@ human: |
 
   {repair_note}
 
+  Include an `assumptions` array. List any details you inferred from missing
+  information; return an empty array when no assumptions were needed.
+
   Output schema:
   {format_instructions}

@@ -18,6 +18,8 @@ human: |
   Every endpoint must include realistic request/response field names and
   types, and at least the standard error codes (400, 401, 404, 500) where
   applicable.
+  Include an `assumptions` array for any inferred API behavior; return an
+  empty array when no assumptions were needed.
 
   Output schema:
   {format_instructions}

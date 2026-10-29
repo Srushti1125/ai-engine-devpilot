@@ -72,3 +72,38 @@ def index_chunks(chunks) -> int:
     vs = get_vectorstore()
     vs.add_documents(chunks)
     return len(chunks)
+
+
+def index_document_chunks(chunks) -> tuple[int, bool]:
+    """Reuse identical Chroma documents or replace older versions by filename.
+
+    Returns (chunk_count, reused_existing). This path is used by the Streamlit
+    uploader; the API's existing /ingest contract continues to use index_chunks.
+    """
+    if not chunks:
+        return 0, False
+
+    if settings.VECTOR_STORE_BACKEND != "chroma":
+        return index_chunks(chunks), False
+
+    vs = get_vectorstore()
+    metadata = chunks[0].metadata
+    project_id = metadata["project_id"]
+    source_name = metadata["source_name"]
+    fingerprint = metadata["document_fingerprint"]
+    where = {"$and": [{"project_id": project_id}, {"source_name": source_name}]}
+    existing = vs.get(where=where, include=["metadatas"])
+    existing_ids = existing.get("ids", [])
+    existing_metadata = existing.get("metadatas", []) or []
+
+    if existing_ids and len(existing_metadata) == len(existing_ids) and all(
+        item.get("document_fingerprint") == fingerprint
+        for item in existing_metadata
+    ):
+        return len(existing_ids), True
+
+    if existing_ids:
+        vs.delete(ids=existing_ids)
+
+    vs.add_documents(chunks)
+    return len(chunks), False

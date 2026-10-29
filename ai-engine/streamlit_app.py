@@ -12,7 +12,14 @@ import streamlit as st
 
 # Streamlit Community Cloud secrets are exposed as st.secrets. Populate the
 # environment before importing app.config, which reads settings at import time.
-for _key in ("GOOGLE_API_KEY", "DATABASE_URL", "DEFAULT_LLM", "FALLBACK_LLM", "MISTRAL_API_KEY"):
+for _key in (
+    "GOOGLE_API_KEY",
+    "GROQ_API_KEY",
+    "DATABASE_URL",
+    "DEFAULT_LLM",
+    "FALLBACK_LLM",
+    "MISTRAL_API_KEY",
+):
     if _key not in os.environ and _key in st.secrets:
         os.environ[_key] = str(st.secrets[_key])
 

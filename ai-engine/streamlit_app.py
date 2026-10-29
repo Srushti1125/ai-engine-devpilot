@@ -19,6 +19,10 @@ for _key in (
     "DEFAULT_LLM",
     "FALLBACK_LLM",
     "MISTRAL_API_KEY",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_SESSION_TOKEN",
+    "AWS_DEFAULT_REGION",
 ):
     if _key not in os.environ and _key in st.secrets:
         os.environ[_key] = str(st.secrets[_key])

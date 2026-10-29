@@ -16,6 +16,8 @@ langchain-text-splitters==0.3.2
 
 # --- Document ingestion ---
 unstructured[all-docs]==0.15.13
+pypdf==5.1.0
+amazon-textract-caller==0.2.4
 
 # --- Vector store ---
 pgvector==0.2.5

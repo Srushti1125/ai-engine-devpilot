@@ -64,6 +64,15 @@ def _load_plain_text(file_path: str) -> list[Document]:
     return [Document(page_content=text, metadata={})]
 
 
+def _load_pdf_text(file_path: str) -> list[Document]:
+    """Extract a PDF text layer without requiring system OCR utilities."""
+    from pypdf import PdfReader
+
+    reader = PdfReader(file_path)
+    text = "\n\n".join(page.extract_text() or "" for page in reader.pages).strip()
+    return [Document(page_content=text, metadata={})] if text else []
+
+
 def _load_scanned_pdf_fallback(file_path: str) -> list[Document]:
     """
     Fallback for scanned/image-only PDFs that Unstructured's hi_res strategy
@@ -141,10 +150,23 @@ def load_requirement_doc(
             docs = _load_with_unstructured(local_path)
         if not docs or all(not d.page_content.strip() for d in docs):
             raise ValueError("Extraction produced no text")
-    except Exception:
-        # Most common cause: scanned/image-only PDF with no extractable text layer.
+    except Exception as parse_error:
+        # Community Cloud may not provide all of Unstructured's native PDF
+        # utilities. Try pypdf for ordinary PDFs, then Textract for scans.
         if ext == "pdf":
-            docs = _load_scanned_pdf_fallback(local_path)
+            try:
+                docs = _load_pdf_text(local_path)
+            except Exception:
+                docs = []
+            if not docs:
+                try:
+                    docs = _load_scanned_pdf_fallback(local_path)
+                except Exception as fallback_error:
+                    raise ValueError(
+                        "Could not extract text from this PDF. For scanned/image-only PDFs, "
+                        "configure AWS Textract credentials and permissions in Streamlit secrets. "
+                        f"Details: {fallback_error}"
+                    ) from parse_error
         else:
             raise
 

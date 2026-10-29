@@ -20,8 +20,6 @@ on that RDS instance:
 from functools import lru_cache
 
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_postgres import PGVector
-
 from app.config import settings
 
 EMBEDDING_MODEL = settings.EMBEDDING_MODEL  # "models/text-embedding-004" -> 768 dims
@@ -37,12 +35,33 @@ def get_embeddings() -> GoogleGenerativeAIEmbeddings:
 
 
 @lru_cache(maxsize=1)
-def get_vectorstore() -> PGVector:
-    return PGVector(
-        embeddings=get_embeddings(),
-        collection_name=COLLECTION_NAME,
-        connection=settings.DATABASE_URL,
-        use_jsonb=True,  # store metadata as jsonb -> filterable by project_id/doc_type
+def get_vectorstore():
+    if settings.VECTOR_STORE_BACKEND == "chroma":
+        from langchain_community.vectorstores import Chroma
+
+        return Chroma(
+            collection_name=COLLECTION_NAME,
+            embedding_function=get_embeddings(),
+            persist_directory=settings.CHROMA_PERSIST_DIRECTORY,
+        )
+
+    if settings.VECTOR_STORE_BACKEND == "pgvector":
+        from langchain_postgres import PGVector
+
+        if not settings.DATABASE_URL:
+            raise RuntimeError(
+                "DATABASE_URL is required when VECTOR_STORE_BACKEND is 'pgvector'."
+            )
+        return PGVector(
+            embeddings=get_embeddings(),
+            collection_name=COLLECTION_NAME,
+            connection=settings.DATABASE_URL,
+            use_jsonb=True,
+        )
+
+    raise ValueError(
+        f"Unsupported VECTOR_STORE_BACKEND '{settings.VECTOR_STORE_BACKEND}'. "
+        "Choose 'pgvector' or 'chroma'."
     )
 
 

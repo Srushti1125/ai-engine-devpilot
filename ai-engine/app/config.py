@@ -40,6 +40,8 @@ class Settings:
 
     # --- Vector store ---
     COLLECTION_NAME: str = os.environ.get("COLLECTION_NAME", "devpilot_requirements")
+    VECTOR_STORE_BACKEND: str = os.environ.get("VECTOR_STORE_BACKEND", "pgvector").lower()
+    CHROMA_PERSIST_DIRECTORY: str = os.environ.get("CHROMA_PERSIST_DIRECTORY", ".chroma")
 
     # --- Service ---
     PORT: int = int(os.environ.get("AI_ENGINE_PORT", "8001"))
@@ -50,7 +52,7 @@ class Settings:
 
     def validate(self):
         _require("GOOGLE_API_KEY")
-        if not self.DATABASE_URL:
+        if self.VECTOR_STORE_BACKEND == "pgvector" and not self.DATABASE_URL:
             raise RuntimeError("DATABASE_URL is required (shared RDS Postgres instance).")
 
 

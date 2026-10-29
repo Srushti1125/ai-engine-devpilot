@@ -10,6 +10,10 @@ from pathlib import Path
 
 import streamlit as st
 
+# Community Cloud demo uses a local Chroma index, so it doesn't need a
+# PostgreSQL DATABASE_URL secret. The API keeps pgvector as its default.
+os.environ.setdefault("VECTOR_STORE_BACKEND", "chroma")
+
 # Streamlit Community Cloud secrets are exposed as st.secrets. Populate the
 # environment before importing app.config, which reads settings at import time.
 for _key in (
